@@ -3,10 +3,10 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.zouhmi</groupId>
-  <artifactId>silentstaffmembers</artifactId>
+  <artifactId>scso</artifactId>
   <version>1.0.0</version>
-  <name>SilentStaffMembers</name>
-  <description>Folia staff-only access control backed by Silent Client ranks.</description>
+  <name>SCSO</name>
+  <description>Silent Client Staff Only - Folia staff-only access control backed by Silent Client ranks.</description>
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -52,7 +52,7 @@
     </dependency>
   </dependencies>
   <build>
-    <finalName>SilentStaffMembers-${project.version}</finalName>
+    <finalName>SCSO-${project.version}</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

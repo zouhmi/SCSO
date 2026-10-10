@@ -1,0 +1,11 @@
+# Build output
+target/
+
+# Editors
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# Deployment scratch
+*.log

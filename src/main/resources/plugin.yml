@@ -1,0 +1,30 @@
+name: SCSO
+version: '1.0.0'
+main: net.zouhmi.silentstaffmembers.SilentStaffMembersPlugin
+description: Silent Client Staff Only - restricts access to Silent Client staff and shows their rank and icon in chat and tab.
+author: Zouhmi
+api-version: '26.1.2'
+folia-supported: true
+# TAB owns the tab list when it is installed. Soft-depending on it makes TAB load
+# first so its API is available; the plugin still runs normally without TAB.
+softdepend: [TAB]
+commands:
+  scso:
+    description: Reload SCSO, inspect its icon pack, or manage the whitelist for non-staff players.
+    usage: '/scso reload | pack | whitelist add|remove <player> | list'
+    permission: scso.admin
+    # /staff and /silentstaff are the same command. Drop either alias if another plugin owns it.
+    aliases: [staff, silentstaff]
+permissions:
+  scso.admin:
+    description: Full access to SCSO (reload, icon pack and whitelist).
+    default: op
+    children:
+      scso.reload: true
+      scso.whitelist: true
+  scso.reload:
+    description: Allows reloading SCSO configuration and re-verifying online ranks.
+    default: op
+  scso.whitelist:
+    description: Allows adding and removing non-staff players on the join whitelist.
+    default: op

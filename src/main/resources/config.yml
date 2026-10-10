@@ -1,0 +1,75 @@
+# Silent Client's public username lookup returns { account: { username, user_id, ... } }.
+# The account's current rank list is then retrieved by numeric user_id.
+api-base-url: https://api.silentclient.net
+connect-timeout-ms: 2500
+request-timeout-ms: 5000
+# If the API is unreachable, deny new logins. This avoids accidentally admitting
+# non-staff during an outage. Set false to allow joins during API outages.
+# Whitelisted names (whitelist.yml, managed with /silentstaff whitelist) are never
+# affected by this and never need a rank lookup at all.
+fail-closed: true
+kick-message: '&cThis server is restricted to Silent Client staff.'
+lookup-failed-message: '&cCould not verify your Silent Client staff rank. Please try again shortly.'
+# Rank matching is case-insensitive and trims whitespace; keys are checked too.
+staff-ranks:
+  - Tester
+  - Senior Tester
+  - Tech Support
+  - Senior Tech Support
+  - Client Mod
+  - Senior Client Mod
+  - Tester Manager
+  - Client Mod Manager
+  - Admin
+  - Senior Admin
+  - Developer
+  - Owner
+
+# SCSO - Silent Client Staff Only.
+# Chat icons: the Silent Client rank icons travel with the resource pack this plugin
+# generates, so %icon% becomes the rank's icon for viewers whose client loaded the pack.
+# When a viewer has not loaded it, %icon% and its space are dropped, so nobody ever sees
+# a missing-glyph box. Set false to leave the icons out of every message.
+chat-icons: true
+# Display format: icon, then the colored Silent Client rank, then the player's name.
+chat-format: '%icon% %rank% %name% >> %message%'
+# The tab list format. %name% is the split point handed to TAB: everything before it
+# becomes the tab prefix and everything after it the suffix, so the rank follows the
+# player when the format is reordered. Without TAB the whole format is one list name.
+tab-format: '%rank% %name%'
+# Per-rank icon overrides. By default a rank looks for an icon file named after itself
+# (Senior Tech Support -> senior_tech_support.png), so ranks the service has no icon for
+# are shown without one. Map them onto an icon that does exist, or drop your own PNG into
+# plugins/SCSO/icons/ and name it here:
+# icon-ranks:
+#   Senior Admin: admin
+#   Owner: admin
+icon-ranks: {}
+
+# TAB (NEZNAMY) integration. TAB owns the tab list while it is installed, so when the
+# plugin is detected the rank is pushed through TAB's API instead of the vanilla list
+# name. Set false to leave TAB completely alone.
+tab-integration: true
+# When TAB is hooked, also show the rank prefix above the player's head through TAB.
+tab-nametag-prefix: true
+
+# The pack carrying the icons is rebuilt on every start into
+# plugins/SCSO/SCSO-Icons.zip and its SHA-1 is logged.
+# Host that zip anywhere static and put the address in url; the plugin then offers the
+# pack to players as they join. (Pointing server.properties' resource-pack at the same
+# zip works too - the plugin notices when the client loads it.)
+resource-pack:
+  url: ''
+  required: false
+  prompt: 'Silent Staff Members shows your staff rank icon in chat.'
+  # Resource pack format: 84 is Minecraft 26.1.2's own value. Only change it if you run
+  # the plugin against a different Minecraft version.
+  format: 84
+  # Set true when something else (a proxy, or server.properties) delivers the pack and
+  # this plugin cannot see the client's status: icons are then drawn for every viewer.
+  assume-loaded: false
+
+# A rank must have a valid service-provided hex color. Malformed colors fall back to white.
+cache:
+  ttl-seconds: 300
+  max-entries: 10000
