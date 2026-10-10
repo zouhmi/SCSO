@@ -1,4 +1,4 @@
-# <img src="https://silentclient.net/assets/logo.png" alt="Silent Client" width="32" height="32" style="vertical-align: middle;"> SilentStaffMembers
+# <img src="https://silentclient.net/assets/logo.png" alt="Silent Client" width="32" height="32" style="vertical-align: middle;"> SCSO (Silent Client Staff Only)
 
 A Folia plugin that restricts access to Silent Client staff only. It checks a player before login, then shows their rank in chat, the tab list, and above their head.
 
