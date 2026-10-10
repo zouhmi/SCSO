@@ -21,10 +21,6 @@ Safe handling of rank colors and formatting
 3. If they are not staff, the login is denied.
 4. If they are staff, the rank is cached and shown in-game.
 
-## Supported ranks
-
-Tester, Tech Support, Senior Tech Support, Admin, Developer, Senior Tester, Senior Admin, Client Mod
-
 ## Configuration
 
 Edit config.yml after the first start.
