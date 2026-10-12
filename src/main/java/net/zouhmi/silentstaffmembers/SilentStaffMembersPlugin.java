@@ -258,8 +258,9 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         if (label == null || label.isBlank()) return null;
         if (directory.defines(label)) return directory.byLabel(label);
         StaffRank known = service == null ? null : service.get(RankDirectory.normalize(label));
-
         if (known != null) return known;
+        String canonical = RankPolicy.canonicalDefault(label);
+        if (canonical != null) return StaffRank.from(canonical, null);
         return directory.byLabel(label);
     }
 
@@ -311,6 +312,13 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
 
     private boolean pinGrantsAccess(String username) {
         return overrideGrantsAccess && rankOverrides.rankFor(username) != null;
+    }
+
+    private String pinSource(String pinnedLabel) {
+        if (rankDirectory.defines(pinnedLabel)) return "rank pin from custom-ranks";
+        if (RankPolicy.canonicalDefault(pinnedLabel) != null) return "rank pin";
+        if (serviceRanks.containsKey(RankDirectory.normalize(pinnedLabel))) return "rank pin";
+        return "rank pin (not in custom-ranks)";
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -748,7 +756,8 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
                 .append(Component.text(" onto " + name + " (" + rankOverrides.size() + " rank pin(s)).",
                         NamedTextColor.GREEN)));
         if (!rankDirectory.defines(pinned.name())
-                && !serviceRanks.containsKey(RankDirectory.normalize(pinned.name()))) {
+                && !serviceRanks.containsKey(RankDirectory.normalize(pinned.name()))
+                && RankPolicy.canonicalDefault(pinned.name()) == null) {
             sender.sendMessage(Component.text("Tip: add " + pinned.name() + " to custom-ranks in config.yml "
                     + "to give it a color and a priority.", NamedTextColor.GRAY));
         }
@@ -827,7 +836,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         sender.sendMessage(line("Player", username + (online == null ? " (offline)" : " (online)")));
         sender.sendMessage(line("Rank", rank == null ? "none" : rank.name()));
         sender.sendMessage(line("Rank source", pinnedLabel != null
-                ? "rank pin" + (rankDirectory.defines(pinnedLabel) ? " from custom-ranks" : " (not in custom-ranks)")
+                ? pinSource(pinnedLabel)
                 : verified ? "Silent Client rank check"
                 : "no rank in this session"));
         sender.sendMessage(line("Whitelisted", whitelisted ? "yes" : "no"));

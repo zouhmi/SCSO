@@ -76,6 +76,15 @@ final class RankPolicy {
         };
     }
 
+    static String canonicalDefault(String label) {
+        if (label == null) return null;
+        String want = normalize(label);
+        for (String rank : DEFAULT_STAFF_RANKS_ORDERED) {
+            if (normalize(rank).equals(want)) return rank;
+        }
+        return null;
+    }
+
     private boolean matches(String rank) {
         return rank != null && ranks.contains(normalize(rank));
     }
