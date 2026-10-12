@@ -18,7 +18,7 @@ A Folia plugin that restricts server access to Silent Client staff, displays the
 - Cache lookups to reduce API requests.
 - Safely handle API failures with configurable fail-closed behaviour.
 
-Tested on Folia `26.1.2` with Java 25, with and without TAB `6.2.0`.
+Tested on Folia `26.1.2` with Java 25, with and without TAB `6.x`.
 
 ## Commands
 

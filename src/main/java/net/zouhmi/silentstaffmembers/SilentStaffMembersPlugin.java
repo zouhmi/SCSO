@@ -14,6 +14,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
@@ -392,18 +394,35 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         if (rankFor(player.getUniqueId(), username) != null) {
             applyDisplays(player);
         } else if (whitelist.contains(username)) {
-
             resolveRank(player, false);
         }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-
         UUID id = event.getPlayer().getUniqueId();
         verifiedRanks.remove(id);
         sessionNames.remove(id);
         allowedSessions.remove(id);
+    }
+
+    @EventHandler
+    public void onPluginEnable(PluginEnableEvent event) {
+        if (!event.getPlugin().getName().equals("TAB")) return;
+        if (!tabIntegration) return;
+        connectTab();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (rankFor(player.getUniqueId(), player.getName()) == null) continue;
+            player.getScheduler().run(this, task -> {
+                if (player.isOnline()) applyDisplays(player);
+            }, null);
+        }
+    }
+
+    @EventHandler
+    public void onPluginDisable(PluginDisableEvent event) {
+        if (!event.getPlugin().getName().equals("TAB")) return;
+        disconnectTab();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
