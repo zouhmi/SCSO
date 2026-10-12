@@ -52,7 +52,10 @@ final class RankPolicy {
             case "client mod" -> "Client Mod";
             default -> java.util.Arrays.stream(key.replace('_', ' ').replace('-', ' ').split("\\s+"))
                     .filter(part -> !part.isBlank())
-                    .map(part -> Character.toUpperCase(part.charAt(0)) + part.substring(1))
+                    .map(part -> {
+                        String lower = part.toLowerCase(Locale.ROOT);
+                        return Character.toUpperCase(lower.charAt(0)) + lower.substring(1);
+                    })
                     .collect(Collectors.joining(" "));
         };
     }

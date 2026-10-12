@@ -44,7 +44,6 @@ final class SilentClientApi implements AutoCloseable {
         this.client = HttpClient.newBuilder()
                 .connectTimeout(connectTimeout)
                 .followRedirects(HttpClient.Redirect.NEVER)
-                .version(HttpClient.Version.HTTP_2)
                 .build();
     }
 
@@ -55,7 +54,8 @@ final class SilentClientApi implements AutoCloseable {
         if (found != null && now - found.cachedAtNanos() < cacheTtlNanos) {
             return CompletableFuture.completedFuture(found.result());
         }
-        String encoded = URLEncoder.encode(username, StandardCharsets.UTF_8);
+        // URLEncoder is for query strings (space -> +); this is a path segment.
+        String encoded = URLEncoder.encode(username, StandardCharsets.UTF_8).replace("+", "%20");
         return getJson("/users/account/" + encoded)
                 .thenCompose(accountResponse -> {
                     JsonObject account = object(accountResponse, "account");
@@ -78,6 +78,15 @@ final class SilentClientApi implements AutoCloseable {
                 });
     }
 
+    /**
+     * The same lookup, but the cached answer is thrown away first, so an admin asking
+     * "has this rank changed?" is told what the service says right now.
+     */
+    CompletableFuture<LookupResult> lookupFresh(String username) {
+        cache.remove(normalize(username));
+        return lookup(username);
+    }
+
     private CompletableFuture<JsonObject> getJson(String path) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + path))
                 .timeout(requestTimeout)
@@ -95,8 +104,7 @@ final class SilentClientApi implements AutoCloseable {
                         JsonElement parsed = JsonParser.parseString(response.body());
                         if (!parsed.isJsonObject()) throw new LookupException("Expected a JSON object");
                         JsonObject root = parsed.getAsJsonObject();
-                        JsonElement errors = root.get("errors");
-                        if (errors != null && !errors.isJsonNull() && !(errors.isJsonArray() && errors.getAsJsonArray().isEmpty())) {
+                        if (hasErrors(root.get("errors"))) {
                             throw new LookupException("Silent Client API reported a lookup error");
                         }
                         return root;
@@ -136,8 +144,16 @@ final class SilentClientApi implements AutoCloseable {
             long now = System.nanoTime();
             cache.entrySet().removeIf(entry -> now - entry.getValue().cachedAtNanos() >= cacheTtlNanos);
             if (cache.size() >= maxCacheEntries) {
-                String first = cache.keySet().stream().findFirst().orElse(null);
-                if (first != null) cache.remove(first);
+                // Evict the oldest entry, not an arbitrary one, so hot ranks survive.
+                String oldest = null;
+                long oldestAt = Long.MAX_VALUE;
+                for (Map.Entry<String, CachedResult> entry : cache.entrySet()) {
+                    if (entry.getValue().cachedAtNanos() < oldestAt) {
+                        oldestAt = entry.getValue().cachedAtNanos();
+                        oldest = entry.getKey();
+                    }
+                }
+                if (oldest != null) cache.remove(oldest);
             }
         }
         cache.put(key, new CachedResult(result, System.nanoTime()));
@@ -165,6 +181,23 @@ final class SilentClientApi implements AutoCloseable {
                 ? null : value.getAsString();
     }
 
+    /** True when the API's {@code errors} element actually reports a failure. */
+    private static boolean hasErrors(JsonElement errors) {
+        if (errors == null || errors.isJsonNull()) return false;
+        if (errors.isJsonArray()) return !errors.getAsJsonArray().isEmpty();
+        if (errors.isJsonObject()) return !errors.getAsJsonObject().isEmpty();
+        if (errors.isJsonPrimitive()) {
+            var primitive = errors.getAsJsonPrimitive();
+            if (primitive.isBoolean()) return primitive.getAsBoolean();
+            if (primitive.isNumber()) return primitive.getAsDouble() != 0;
+            if (primitive.isString()) {
+                String text = primitive.getAsString();
+                return text != null && !text.isBlank() && !text.equalsIgnoreCase("null");
+            }
+        }
+        return false;
+    }
+
     private static int number(JsonObject object, String key) {
         JsonElement value = object.get(key);
         if (value == null || !value.isJsonPrimitive()) return 0;
@@ -178,6 +211,11 @@ final class SilentClientApi implements AutoCloseable {
     @Override
     public void close() {
         cache.clear();
+        try {
+            client.close();
+        } catch (RuntimeException e) {
+            // HttpClient close is best-effort on reload; threads are daemon anyway.
+        }
     }
 
     record LookupResult(String username, List<StaffRank> staffRanks) {

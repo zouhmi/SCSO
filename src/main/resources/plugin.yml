@@ -1,7 +1,7 @@
 name: SCSO
-version: '1.0.0'
+version: '1.1.0'
 main: net.zouhmi.silentstaffmembers.SilentStaffMembersPlugin
-description: Silent Client Staff Only - restricts access to Silent Client staff and shows their rank and icon in chat and tab.
+description: Silent Client Staff Only - restricts access to Silent Client staff and shows their rank in chat and tab.
 author: Zouhmi
 api-version: '26.1.2'
 folia-supported: true
@@ -10,21 +10,36 @@ folia-supported: true
 softdepend: [TAB]
 commands:
   scso:
-    description: Reload SCSO, inspect its icon pack, or manage the whitelist for non-staff players.
-    usage: '/scso reload | pack | whitelist add|remove <player> | list'
-    permission: scso.admin
+    description: Reload SCSO, sync ranks, pin ranks and manage the whitelist for non-staff players.
+    usage: '/scso reload | sync | rank set <player> <rank> | rank remove <player> | rank list | whitelist add|remove <player> | list | info [player] | check <player>'
+    # The base command stays open: each sub-command enforces its own permission,
+    # so a moderator with only scso.info can still run /scso info.
+    permission: scso.info
+    permission-message: You do not have permission.
     # /staff and /silentstaff are the same command. Drop either alias if another plugin owns it.
     aliases: [staff, silentstaff]
 permissions:
   scso.admin:
-    description: Full access to SCSO (reload, icon pack and whitelist).
+    description: Full access to SCSO (reload, rank pins, whitelist and diagnostics).
     default: op
     children:
       scso.reload: true
+      scso.sync: true
       scso.whitelist: true
+      scso.rank: true
+      scso.info: true
   scso.reload:
     description: Allows reloading SCSO configuration and re-verifying online ranks.
     default: op
+  scso.sync:
+    description: Allows re-verifying every online player's rank against Silent Client right now.
+    default: op
   scso.whitelist:
     description: Allows adding and removing non-staff players on the join whitelist.
+    default: op
+  scso.rank:
+    description: Allows pinning, changing and removing the rank a player is shown as.
+    default: op
+  scso.info:
+    description: Allows inspecting a player's rank, where it comes from and their access.
     default: op

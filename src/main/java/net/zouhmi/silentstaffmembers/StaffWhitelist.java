@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -28,45 +27,45 @@ final class StaffWhitelist {
     private final Path file;
     private final Logger logger;
     /** lowercase name -> name as it was added */
-    private final Map<String, String> names = Collections.synchronizedMap(new LinkedHashMap<>());
+    private final Map<String, String> names = new LinkedHashMap<>();
 
     StaffWhitelist(Path file, Logger logger) {
         this.file = file;
         this.logger = logger;
     }
 
-    boolean contains(String username) {
+    synchronized boolean contains(String username) {
         return username != null && names.containsKey(username.trim().toLowerCase(Locale.ROOT));
     }
 
     /**
      * @return {@code false} when the name is already whitelisted
      */
-    boolean add(String username) {
+    synchronized boolean add(String username) {
+        if (username == null) return false;
         String trimmed = username.trim();
+        if (trimmed.isEmpty()) return false;
         return names.putIfAbsent(trimmed.toLowerCase(Locale.ROOT), trimmed) == null;
     }
 
     /**
      * @return {@code false} when the name was not whitelisted
      */
-    boolean remove(String username) {
+    synchronized boolean remove(String username) {
         return username != null && names.remove(username.trim().toLowerCase(Locale.ROOT)) != null;
     }
 
     /** The whitelisted names, in the order they were added, as they were typed. */
-    List<String> names() {
-        synchronized (names) {
-            return List.copyOf(names.values());
-        }
+    synchronized List<String> names() {
+        return List.copyOf(names.values());
     }
 
-    int size() {
+    synchronized int size() {
         return names.size();
     }
 
     /** Re-reads the file, creating an empty one on first run. A broken file leaves the list empty. */
-    void load() {
+    synchronized void load() {
         names.clear();
         if (!Files.isRegularFile(file)) {
             save();
@@ -86,6 +85,9 @@ final class StaffWhitelist {
         } else if (raw instanceof String single) {
             // A single name typed by hand instead of a list still counts.
             addIfName(single);
+        } else if (raw instanceof Map<?, ?> map) {
+            // Accept a mapping too (players: {Notch: true}), using the keys as names.
+            for (Object key : map.keySet()) addIfName(key);
         }
     }
 
@@ -93,9 +95,9 @@ final class StaffWhitelist {
         if (value instanceof String name && !name.isBlank()) add(name);
     }
 
-    void save() {
+    synchronized void save() {
         YamlConfiguration yaml = new YamlConfiguration();
-        yaml.set(ROOT_KEY, names());
+        yaml.set(ROOT_KEY, List.copyOf(names.values()));
         try {
             Path parent = file.getParent();
             if (parent != null) Files.createDirectories(parent);

@@ -7,12 +7,20 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * The one place that turns a format string and a rank into the text a player sees.
+ *
+ * <p>A format may use {@code %rank%} (the bracketed rank in the colour Silent Client
+ * sends or the admin configured), {@code %rank_plain%} (the rank name on its own),
+ * {@code %name%} and, in chat, {@code %message%}.
+ */
 final class NameFormats {
     private static final Pattern PLACEHOLDER =
-            Pattern.compile("%(icon|rank|name|message)%", Pattern.CASE_INSENSITIVE);
-    /** A missing icon must not leave the whitespace that separated it from the rank. */
-    private static final Pattern ICON_AND_SPACE = Pattern.compile("(?i)%icon%[ \\t]?");
-    private static final String PLACEHOLDER_NAME = "%name%";
+            Pattern.compile("%(rank_plain|rank|name|message)%", Pattern.CASE_INSENSITIVE);
+    private static final Pattern NAME_PLACEHOLDER =
+            Pattern.compile("%name%", Pattern.CASE_INSENSITIVE);
+    private static final Pattern RANK_PLACEHOLDER =
+            Pattern.compile("%rank_plain%|%rank%", Pattern.CASE_INSENSITIVE);
     static final String DEFAULT_FORMAT = "%rank% %name%";
 
     private NameFormats() { }
@@ -31,16 +39,9 @@ final class NameFormats {
     }
 
     static Component apply(String format, StaffRank rank, String playerName, Component message) {
-        return apply(format, rank, playerName, message, "");
-    }
-
-    /**
-     * Renders a format for one viewer. {@code icon} is the pack glyph for the rank, or an
-     * empty string when that viewer cannot render it - the format then simply loses the
-     * icon and the space that followed it.
-     */
-    static Component apply(String format, StaffRank rank, String playerName, Component message, String icon) {
-        String template = prepare(format, icon);
+        String template = template(format);
+        Component safeMessage = message == null ? Component.empty() : message;
+        String safeName = playerName == null ? "" : playerName;
         Matcher matcher = PLACEHOLDER.matcher(template);
         Component result = Component.empty();
         int offset = 0;
@@ -49,10 +50,11 @@ final class NameFormats {
                 result = result.append(Component.text(template.substring(offset, matcher.start())));
             }
             result = result.append(switch (matcher.group(1).toLowerCase(Locale.ROOT)) {
-                case "icon" -> Component.text(icon);
                 case "rank" -> Component.text("[" + rank.name() + "]", rank.color());
-                case "name" -> Component.text(playerName, NamedTextColor.WHITE);
-                case "message" -> message;
+                // The bare rank name, for formats that do not want the brackets.
+                case "rank_plain" -> Component.text(rank.name(), rank.color());
+                case "name" -> Component.text(safeName, NamedTextColor.WHITE);
+                case "message" -> safeMessage;
                 default -> Component.empty();
             });
             offset = matcher.end();
@@ -77,49 +79,43 @@ final class NameFormats {
      * left to TAB so its sorting and name handling keep working.
      */
     static TabSlots tabSlots(String format, StaffRank rank) {
-        return tabSlots(format, rank, "");
+        String template = template(format);
+        Matcher name = NAME_PLACEHOLDER.matcher(template);
+        // Neither part can contain %name%, so only these placeholders need resolving.
+        if (!name.find()) return new TabSlots(tabText(template, rank, ""), "");
+        return new TabSlots(
+                tabText(template.substring(0, name.start()), rank, ""),
+                tabText(template.substring(name.end()), rank, ""));
     }
 
-    static TabSlots tabSlots(String format, StaffRank rank, String icon) {
-        String template = prepare(format, icon);
-        int nameAt = template.toLowerCase(Locale.ROOT).indexOf(PLACEHOLDER_NAME);
-        // Neither part can contain %name%, so only these placeholders need resolving.
-        if (nameAt < 0) return new TabSlots(tabText(template, rank, "", icon), "");
-        return new TabSlots(
-                tabText(template.substring(0, nameAt), rank, "", icon),
-                tabText(template.substring(nameAt + PLACEHOLDER_NAME.length()), rank, "", icon));
+    /** True when the format shows a rank anywhere, for TAB nametag handling. */
+    static boolean containsRank(String format) {
+        String template = template(format);
+        return RANK_PLACEHOLDER.matcher(template).find();
     }
 
     /** The full single-line tab text, for when the format never names the player. */
     static String tabString(String format, StaffRank rank, String playerName) {
-        return tabString(format, rank, playerName, "");
+        return tabText(template(format), rank, playerName);
     }
 
-    static String tabString(String format, StaffRank rank, String playerName, String icon) {
-        return tabText(prepare(format, icon), rank, playerName, icon);
-    }
-
-    private static String tabText(String template, StaffRank rank, String playerName, String icon) {
+    private static String tabText(String template, StaffRank rank, String playerName) {
+        String safeName = playerName == null ? "" : playerName;
         Matcher matcher = PLACEHOLDER.matcher(template);
         StringBuilder out = new StringBuilder(template.length() + 16);
         int offset = 0;
         while (matcher.find()) {
             out.append(template, offset, matcher.start());
             switch (matcher.group(1).toLowerCase(Locale.ROOT)) {
-                case "icon" -> out.append(icon);
                 case "rank" -> out.append(tabRank(rank));
-                case "name" -> out.append(playerName);
+                case "rank_plain" -> out.append(rank.name());
+                case "name" -> out.append(safeName);
                 default -> { }
             }
             offset = matcher.end();
         }
         out.append(template, offset, template.length());
         return out.toString();
-    }
-
-    private static String prepare(String format, String icon) {
-        String template = template(format);
-        return icon == null || icon.isEmpty() ? ICON_AND_SPACE.matcher(template).replaceAll("") : template;
     }
 
     private static String template(String format) {

@@ -39,25 +39,28 @@ class NameFormatsTest {
     }
 
     @Test
-    void dropsTheIconAndItsSpaceWhenTheViewerHasNoPack() {
-        assertEquals("[Admin] Zouhir", plain(NameFormats.apply(
-                "%icon% %rank% %name%", admin, "Zouhir", net.kyori.adventure.text.Component.empty(), "")));
+    void rendersTheRankInChatWithTheMessage() {
+        assertEquals("[Admin] Zouhir >> hello", plain(NameFormats.apply(
+                "%rank% %name% >> %message%", admin, "Zouhir",
+                net.kyori.adventure.text.Component.text("hello"))));
     }
 
     @Test
-    void keepsTheIconWhenTheViewerHasThePack() {
-        assertEquals("\uE000 [Admin] Zouhir", plain(NameFormats.apply(
-                "%icon% %rank% %name%", admin, "Zouhir", net.kyori.adventure.text.Component.empty(),
-                "\uE000")));
+    void rendersThePlainRankNameWithoutBrackets() {
+        assertEquals("Admin Zouhir", plain(NameFormats.apply(
+                "%rank_plain% %name%", admin, "Zouhir", net.kyori.adventure.text.Component.empty())));
+        assertEquals("Zouhir Admin", NameFormats.tabString("%name% %rank_plain%", admin, "Zouhir"));
+        // The bracketed and plain placeholders can be used together.
+        assertEquals("Admin [Admin] Zouhir", plain(NameFormats.apply(
+                "%rank_plain% %rank% %name%", admin, "Zouhir",
+                net.kyori.adventure.text.Component.empty())));
     }
 
     @Test
-    void splitsTheTabFormatWithTheIconInFront() {
-        NameFormats.TabSlots slots = NameFormats.tabSlots("%icon% %rank% %name%", admin, "\uE000");
-        assertEquals("\uE000 &#FF55FF[Admin] ", slots.prefix());
-
-        NameFormats.TabSlots withoutIcon = NameFormats.tabSlots("%icon% %rank% %name%", admin, "");
-        assertEquals("&#FF55FF[Admin] ", withoutIcon.prefix());
+    void leavesTheRemovedIconPlaceholderAsPlainText() {
+        // The plugin strips a leftover %icon% at load time; the formatter itself is literal.
+        assertEquals("%icon% [Admin]", plain(NameFormats.apply(
+                "%icon% %rank%", admin, "Zouhir", net.kyori.adventure.text.Component.empty())));
     }
 
     @Test
