@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="assets/logo.png" width="128" alt="Silent Client logo">
+</p>
+
 # SCSO | Silent Client Staff Only
+
+<p align="center">Logo by <a href="https://silentclient.net">Silent Client</a></p>
 
 A Folia plugin that restricts server access to Silent Client staff, displays their ranks in chat and player lists, and supports optional TAB integration.
 
