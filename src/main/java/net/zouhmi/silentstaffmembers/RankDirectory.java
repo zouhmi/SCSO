@@ -32,11 +32,17 @@ final class RankDirectory {
             if (key == null || key.isBlank()) continue;
             Entry entry = readEntry(key, section, warn);
             if (entry == null) continue;
-
-            entries.put(normalize(key), entry);
-            entries.put(normalize(entry.label()), entry);
+            put(entries, normalize(key), entry, key, warn);
+            put(entries, normalize(entry.label()), entry, key, warn);
         }
         return new RankDirectory(entries);
+    }
+
+    private static void put(Map<String, Entry> entries, String mapKey, Entry entry, String key, Consumer<String> warn) {
+        Entry previous = entries.put(mapKey, entry);
+        if (previous != null && !previous.label().equalsIgnoreCase(entry.label())) {
+            warn.accept("custom-ranks: '" + key + "' overwrites another entry with the same name.");
+        }
     }
 
     private static Entry readEntry(String key, ConfigurationSection section, Consumer<String> warn) {
@@ -48,6 +54,9 @@ final class RankDirectory {
             String configuredLabel = nested.getString("label", nested.getString("name"));
             if (configuredLabel != null && !configuredLabel.isBlank()) label = configuredLabel.trim();
             color = readColor(nested.getString("color"), key, warn);
+            if (nested.contains("priority") && !nested.isInt("priority")) {
+                warn.accept("custom-ranks: '" + key + "' has an invalid priority; 0 is used.");
+            }
             priority = nested.getInt("priority", 0);
         } else {
             String value = section.getString(key);

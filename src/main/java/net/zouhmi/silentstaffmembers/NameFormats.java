@@ -2,6 +2,7 @@ package net.zouhmi.silentstaffmembers;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -15,6 +16,7 @@ final class NameFormats {
     private static final Pattern RANK_PLACEHOLDER =
             Pattern.compile("%rank_plain%|%rank%", Pattern.CASE_INSENSITIVE);
     static final String DEFAULT_FORMAT = "%rank% %name%";
+    private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacyAmpersand();
 
     private NameFormats() { }
 
@@ -40,7 +42,7 @@ final class NameFormats {
         int offset = 0;
         while (matcher.find()) {
             if (matcher.start() > offset) {
-                result = result.append(Component.text(template.substring(offset, matcher.start())));
+                result = result.append(legacy(template.substring(offset, matcher.start())));
             }
             result = result.append(switch (matcher.group(1).toLowerCase(Locale.ROOT)) {
                 case "rank" -> Component.text("[" + rank.name() + "]", rank.color());
@@ -52,8 +54,13 @@ final class NameFormats {
             });
             offset = matcher.end();
         }
-        if (offset < template.length()) result = result.append(Component.text(template.substring(offset)));
+        if (offset < template.length()) result = result.append(legacy(template.substring(offset)));
         return result;
+    }
+
+    private static Component legacy(String text) {
+        if (text == null || text.isEmpty()) return Component.empty();
+        return LEGACY.deserialize(text);
     }
 
     static String tabRank(StaffRank rank) {

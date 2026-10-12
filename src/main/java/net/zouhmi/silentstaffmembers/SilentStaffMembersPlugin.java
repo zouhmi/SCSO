@@ -57,6 +57,8 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
     private static final String DEFAULT_CHAT_FORMAT = "%rank% %name% >> %message%";
 
     private static final Pattern ICON_PLACEHOLDER = Pattern.compile("(?i)%icon%[ \\t]?");
+    private static final net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer LEGACY =
+            net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand();
 
     private static final String LEGACY_DATA_FOLDER = "SilentStaffMembers";
 
@@ -129,7 +131,9 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
             int maxEntries = boundedInt("cache.max-entries", 10000, 100, 100000);
 
             List<String> configured = getConfig().getStringList("staff-ranks");
-            if (configured.isEmpty()) configured = RankPolicy.DEFAULT_STAFF_RANKS_ORDERED;
+            if (configured.isEmpty() && !getConfig().contains("staff-ranks")) {
+                configured = RankPolicy.DEFAULT_STAFF_RANKS_ORDERED;
+            }
             rankPolicy = new RankPolicy(configured);
             api = new SilentClientApi(baseUrl, Duration.ofMillis(connectTimeoutMs),
                     Duration.ofMillis(requestTimeoutMs), rankPolicy.configuredRanks(), ttl, maxEntries);
@@ -972,8 +976,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
 
     private static Component legacyText(String input) {
         if (input == null || input.isBlank()) return Component.empty();
-        return net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand()
-                .deserialize(input);
+        return LEGACY.deserialize(input);
     }
 
     @Override
