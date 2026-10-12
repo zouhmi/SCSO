@@ -46,23 +46,22 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
     private static final int MAX_RANK_PINS_SHOWN = 40;
     private static final String DEFAULT_DISPLAY_NAME_FORMAT = "%rank% %name%";
     private static final String DEFAULT_TAB_FORMAT = "%rank% %name%";
-    /** Rank names admins may pin: letters, digits, spaces and the punctuation ranks use. */
+
     private static final Pattern RANK_LABEL = Pattern.compile("[A-Za-z0-9][A-Za-z0-9 _.-]{0,31}");
-    /** Minecraft names: 1-16 word characters; Bukkit login already enforces 3-16. */
+
     private static final Pattern USERNAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
-    /** This plugin's own command name; /staff and /silentstaff are aliases of it. */
+
     private static final String COMMAND_NAME = "scso";
     private static final String DEFAULT_CHAT_FORMAT = "%rank% %name% >> %message%";
-    /** Left over in a format written while this plugin still shipped chat icons. */
+
     private static final Pattern ICON_PLACEHOLDER = Pattern.compile("(?i)%icon%[ \\t]?");
-    /** Folder used before the plugin was renamed, migrated once on first start as SCSO. */
+
     private static final String LEGACY_DATA_FOLDER = "SilentStaffMembers";
 
-    /** The rank the service reported for a session; an admin rank pin replaces it. */
     private final Map<UUID, StaffRank> verifiedRanks = new ConcurrentHashMap<>();
-    /** Session names, so a UUID can be resolved to a Minecraft name anywhere here. */
+
     private final Map<UUID, String> sessionNames = new ConcurrentHashMap<>();
-    /** Sessions allowed in, whether by a verified rank or by an admin decision. */
+
     private final Set<UUID> allowedSessions = ConcurrentHashMap.newKeySet();
     private volatile SilentClientApi api;
     private volatile RankPolicy rankPolicy;
@@ -74,31 +73,26 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
     private volatile int requestTimeoutMs;
     private volatile boolean tabIntegration;
     private volatile boolean tabNametagPrefix;
-    /** Players who may join without a staff rank; loaded in onEnable before any login. */
+
     private volatile StaffWhitelist whitelist;
-    /** Non-null only while TAB is installed and its API accepted us. */
+
     private volatile TabHook tabHook;
-    /** Per-player rank pins: the config's rank-overrides plus ranks.yml. */
+
     private volatile RankOverrides rankOverrides;
-    /** Admin-defined rank colours and priorities from custom-ranks. */
+
     private volatile RankDirectory rankDirectory = RankDirectory.empty();
-    /**
-     * Rank colours and priorities Silent Client itself reported, by normalized rank name.
-     * Kept outside {@link RankDirectory} so a config reload never forgets what the service
-     * looks like: a pinned rank shows the service's own colour until the admin recolours
-     * it in {@code custom-ranks}.
-     */
+
     private final Map<String, StaffRank> serviceRanks = new ConcurrentHashMap<>();
-    /** Whether pinning a rank also lets that player in without a verified staff rank. */
+
     private volatile boolean overrideGrantsAccess;
-    /** The format for the player's own name, above their head and in hover text. */
+
     private volatile String displayNameFormat;
-    /** TAB sorting team forced onto staff, or blank to leave TAB's sorting alone. */
+
     private volatile String tabSortTeam;
 
     @Override
     public void onEnable() {
-        // Runs before saveDefaultConfig, so a config from the old folder is not overwritten.
+
         migrateLegacyDataFolder();
         saveDefaultConfig();
         whitelist = new StaffWhitelist(getDataFolder().toPath().resolve("whitelist.yml"), getLogger());
@@ -125,12 +119,13 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
             }
             int connectTimeoutMs = boundedInt("connect-timeout-ms", 2500, 250, 10000);
             requestTimeoutMs = boundedInt("request-timeout-ms", 5000, 500, 15000);
-            requestTimeoutMs = Math.min(requestTimeoutMs, MAX_LOOKUP_WAIT_MS - 500);
+
+            requestTimeoutMs = Math.min(requestTimeoutMs, (MAX_LOOKUP_WAIT_MS - 2000) / 2);
             long ttl = Math.max(0, Math.min(3600, getConfig().getLong("cache.ttl-seconds", 300)));
             int maxEntries = boundedInt("cache.max-entries", 10000, 100, 100000);
 
             List<String> configured = getConfig().getStringList("staff-ranks");
-            if (configured.isEmpty()) configured = List.copyOf(RankPolicy.DEFAULT_STAFF_RANKS);
+            if (configured.isEmpty()) configured = RankPolicy.DEFAULT_STAFF_RANKS_ORDERED;
             rankPolicy = new RankPolicy(configured);
             api = new SilentClientApi(baseUrl, Duration.ofMillis(connectTimeoutMs),
                     Duration.ofMillis(requestTimeoutMs), rankPolicy.configuredRanks(), ttl, maxEntries);
@@ -149,8 +144,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
                     getLogger()::warning);
             overrideGrantsAccess = getConfig().getBoolean("rank-override-grants-access", true);
             tabSortTeam = getConfig().getString("tab-sort-team", "");
-            // Only touched after the config is known good, so a bad config cannot
-            // drop the whitelist or the rank pins that are currently in force.
+
             whitelist.load();
             rankOverrides.load(RankOverrides.readConfigured(
                     getConfig().getConfigurationSection("rank-overrides")));
@@ -161,10 +155,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         }
     }
 
-    /**
-     * Drops a {@code %icon%} left in a format by an older install, so an upgraded server
-     * never shows the placeholder as literal text.
-     */
     private String withoutIconPlaceholder(String format, String key) {
         if (format == null || !ICON_PLACEHOLDER.matcher(format).find()) return format;
         String cleaned = ICON_PLACEHOLDER.matcher(format).replaceAll("").trim();
@@ -172,10 +162,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return cleaned;
     }
 
-    /**
-     * Copies config.yml, whitelist.yml and ranks.yml from the folder used before the plugin
-     * was renamed, so the upgrade keeps the admin's settings.
-     */
     private void migrateLegacyDataFolder() {
         Path dataFolder = getDataFolder().toPath();
         Path parent = dataFolder.getParent();
@@ -205,11 +191,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         }
     }
 
-    /**
-     * Attaches to TAB when it is installed. TAB refuses to let another plugin control the
-     * tab list, so the rank is submitted through TAB's own API. Nothing here touches TAB's
-     * classes until the plugin is known to be present.
-     */
     private void connectTab() {
         disconnectTab();
         if (!tabIntegration) return;
@@ -221,7 +202,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
             TabHook hook = TabHook.register(getLogger(), () -> tabFormat,
                     uuid -> rankFor(uuid, sessionNames.get(uuid)), tabNametagPrefix,
                     () -> tabSortTeam, this::scheduleTabRetry);
-            // TabHook logs what TAB actually offered once it is connected.
+
             if (hook != null) tabHook = hook;
         } catch (Throwable t) {
             getLogger().warning("Could not enable the TAB integration (" + t
@@ -235,26 +216,16 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         if (previous != null) previous.close();
     }
 
-    /**
-     * Writes the rank everywhere it is shown. The vanilla calls are the fallback and are
-     * what TAB blocks when its own tablist format is enabled; the TAB API call is what
-     * wins in that case. Nothing happens for a player with no rank to show.
-     */
     private void applyDisplays(Player player) {
         StaffRank rank = rankFor(player.getUniqueId(), player.getName());
         if (rank == null) return;
         player.displayName(NameFormats.apply(displayNameFormat, rank, player.getName(), Component.empty()));
-        // The vanilla list name is what is left when TAB is not installed; TAB replaces
-        // it with the API calls above when it owns the tab list.
+
         player.playerListName(NameFormats.apply(tabFormat, rank, player.getName(), Component.empty()));
         TabHook hook = tabHook;
         if (hook != null) hook.apply(player.getUniqueId());
     }
 
-    /**
-     * The rank to show for one session: a rank pin always wins, otherwise the rank the
-     * service reported when the player was let in.
-     */
     private StaffRank rankFor(UUID id, String name) {
         String player = name != null ? name : (id == null ? null : sessionNames.get(id));
         if (player != null) {
@@ -264,11 +235,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return id == null ? null : verifiedRanks.get(id);
     }
 
-    /**
-     * Remembers the colours and priorities Silent Client reported, so a pinned rank that
-     * names a real service rank is shown in the service's own colour even when the admin
-     * never added it to {@code custom-ranks}.
-     */
     private void learnServiceRanks(List<StaffRank> ranks) {
         if (ranks == null) return;
         for (StaffRank rank : ranks) {
@@ -276,26 +242,19 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         }
     }
 
-    /** The rank a pinned label stands for: the admin's custom rank wins, then the service colour. */
     private StaffRank pinnedRank(String label) {
         return resolvePinnedRank(label, rankDirectory, serviceRanks);
     }
 
-    /**
-     * Builds the rank a pinned label stands for: the admin's colour and priority when the
-     * label is defined in {@code custom-ranks}, otherwise the colour Silent Client last
-     * reported for that rank, otherwise the label itself in the default colour.
-     */
     static StaffRank resolvePinnedRank(String label, RankDirectory directory, Map<String, StaffRank> service) {
         if (label == null || label.isBlank()) return null;
         if (directory.defines(label)) return directory.byLabel(label);
         StaffRank known = service == null ? null : service.get(RankDirectory.normalize(label));
-        // The service spelling wins over the admin's casing, so "owner" still shows as Owner.
+
         if (known != null) return known;
         return directory.byLabel(label);
     }
 
-    /** Strips one pair of surrounding quotes, so a quoted multi-word rank still resolves. */
     static String unquote(String value) {
         if (value == null) return "";
         String trimmed = value.trim();
@@ -309,7 +268,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return trimmed;
     }
 
-    /** Re-applies the displays for an online player, on that player's own thread. */
     private void applyToOnlinePlayer(String username) {
         Player player = findOnlinePlayer(username);
         if (player == null) return;
@@ -318,7 +276,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         }, null);
     }
 
-    /** Case-insensitive online lookup: the stored spelling may differ from the live name. */
     private static Player findOnlinePlayer(String username) {
         if (username == null) return null;
         Player exact = Bukkit.getPlayerExact(username);
@@ -329,11 +286,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return null;
     }
 
-    /**
-     * Re-applies a TAB rank a little later, on the player's own thread. TAB announces a
-     * player before it can accept formatting for them, so the first attempt often has to
-     * wait a tick or two - which is exactly what this does, on Folia as well as on Paper.
-     */
     private void scheduleTabRetry(UUID id, int attempt, Runnable action) {
         Player player = Bukkit.getPlayer(id);
         if (player == null) return;
@@ -349,7 +301,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return value;
     }
 
-    /** Whether a rank pin lets its holder join without a verified staff rank. */
     private boolean pinGrantsAccess(String username) {
         return overrideGrantsAccess && rankOverrides.rankFor(username) != null;
     }
@@ -366,15 +317,14 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         sessionNames.put(event.getUniqueId(), username);
         String pinned = rankOverrides.rankFor(username);
         if (pinned != null && overrideGrantsAccess) {
-            // An admin pinned a rank onto this name, which vouches for it as well.
+
             allowedSessions.add(event.getUniqueId());
             getLogger().info("Allowed " + username + " with the rank pin " + pinned
                     + " without a staff rank check.");
             return;
         }
         if (whitelist.contains(username)) {
-            // An admin vouched for this name, so it joins immediately: no API call, no
-            // rank, and no dependency on the service being reachable.
+
             allowedSessions.add(event.getUniqueId());
             getLogger().info("Allowed whitelisted player " + username + " without a staff rank check.");
             return;
@@ -385,8 +335,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
             denyLookupFailure(event);
             return;
         }
-        // Two HTTP requests run back to back (account, then ranks), each with its own
-        // request timeout, so the login wait must cover both plus a buffer.
+
         long lookupWaitMs = Math.min(MAX_LOOKUP_WAIT_MS, (long) requestTimeoutMs * 2L + 2000L);
         try {
             SilentClientApi.LookupResult result = localApi.lookup(username)
@@ -420,11 +369,11 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
 
     private void denyLookupFailure(AsyncPlayerPreLoginEvent event) {
         if (failClosed) {
-            // No rank was verified, so drop the stored name with the denial.
+
             sessionNames.remove(event.getUniqueId());
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, legacyText(lookupFailedMessage));
         } else {
-            // Fail-open: the join must survive onPlayerJoin, so record the allowance.
+
             allowedSessions.add(event.getUniqueId());
             getLogger().warning("Allowing " + event.getName() + " because fail-closed is disabled.");
         }
@@ -436,23 +385,21 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         sessionNames.putIfAbsent(player.getUniqueId(), player.getName());
         String username = player.getName();
         if (!allowedSessions.contains(player.getUniqueId()) && !pinGrantsAccess(username)) {
-            // A plugin might have changed the pre-login result between callbacks.
+
             player.kick(legacyText(kickMessage));
             return;
         }
         if (rankFor(player.getUniqueId(), username) != null) {
             applyDisplays(player);
         } else if (whitelist.contains(username)) {
-            // Allowed during pre-login. Look the rank up in the background so a
-            // whitelisted staff member still ends up with their rank shown.
+
             resolveRank(player, false);
         }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        // Forget everything about this session. The next login also has to wait out the
-        // API cache TTL, so a rank change is picked up at most ttl-seconds later.
+
         UUID id = event.getPlayer().getUniqueId();
         verifiedRanks.remove(id);
         sessionNames.remove(id);
@@ -506,10 +453,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         if (previous != null) previous.close();
         connectTab();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            // Nobody's entity is touched from this thread: displays are applied on each
-            // player's own scheduler, which is what Folia requires. Verified ranks are
-            // kept until each lookup answers: a failure keeps the old rank, only a
-            // definitive demotion drops it.
+
             player.getScheduler().run(this, task -> {
                 if (player.isOnline()) applyDisplays(player);
             }, null);
@@ -519,13 +463,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return true;
     }
 
-    /**
-     * Re-verifies every online player against Silent Client right now, ignoring the cache,
-     * and rewrites their ranks. Unlike {@code reload} this touches no files and drops no
-     * state up front: a lookup failure keeps the player's current rank and is reported,
-     * while a definitive demotion removes it and kicks, unless the whitelist or a rank
-     * pin still allows them in.
-     */
     private boolean sync(CommandSender sender) {
         if (!sender.hasPermission(SYNC_PERMISSION) && !sender.hasPermission(RELOAD_PERMISSION)) {
             sender.sendMessage(Component.text("You do not have permission.", NamedTextColor.RED));
@@ -548,13 +485,12 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return true;
     }
 
-    /** One player's share of a {@link #sync}: a fresh lookup, then rank, display and access. */
     private void syncPlayer(Player player, SilentClientApi localApi, SyncSummary summary) {
         String username = player.getName();
         UUID id = player.getUniqueId();
         localApi.lookupFresh(username).whenComplete((result, error) -> {
             if (error != null || result == null) {
-                // A transient failure: the current rank stands, and the admin hears about it.
+
                 Throwable cause = error instanceof ExecutionException || error instanceof CompletionException
                         ? error.getCause() : error;
                 getLogger().warning("Sync lookup failed for " + username + ": "
@@ -590,7 +526,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         });
     }
 
-    /** Counts a sync's async outcomes and reports the totals once every player answered. */
     private final class SyncSummary {
         private final CommandSender sender;
         private final AtomicInteger pending;
@@ -619,12 +554,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         }
     }
 
-    /**
-     * Resolves one online player's rank in the background and then applies the displays on
-     * that player's own thread. Whitelisted players and rank pins that grant access are
-     * never kicked, and a transient lookup failure never kicks: only a definitive
-     * "not staff" answer does.
-     */
     private void resolveRank(Player player, boolean kickIfNotStaff) {
         SilentClientApi localApi = api;
         if (localApi == null) return;
@@ -632,17 +561,14 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         localApi.lookup(username).whenComplete((result, error) -> {
             boolean definitiveNotStaff = error == null && result != null && !result.isStaff();
             if (error != null || result == null || !result.isStaff()) {
-                // A definitive "not staff" drops the old verified rank; a lookup failure
-                // keeps it, because a transient outage must not wipe what is shown.
+
                 if (definitiveNotStaff) verifiedRanks.remove(player.getUniqueId());
                 if (definitiveNotStaff && kickIfNotStaff && !whitelist.contains(username)
                         && !pinGrantsAccess(username)) {
                     player.getScheduler().run(this, task -> player.kick(legacyText(kickMessage)), null);
                     return;
                 }
-                // Whoever stays keeps a correct display: the pin when there is one,
-                // otherwise no rank at all instead of a stale one. Failures keep the
-                // current display, so nothing is refreshed for them.
+
                 if (definitiveNotStaff) refreshDisplayAfterDemotion(player);
                 return;
             }
@@ -655,10 +581,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         });
     }
 
-    /**
-     * Rewrites one survivor's display after their verified rank was dropped: a pinned
-     * player keeps the pin, anyone else goes back to a plain name on every surface.
-     */
     private void refreshDisplayAfterDemotion(Player player) {
         player.getScheduler().run(this, task -> {
             if (!player.isOnline()) return;
@@ -667,10 +589,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         }, null);
     }
 
-    /**
-     * Takes the rank off every surface it is shown on: chat follows {@link #rankFor}
-     * on its own, while the name, the list entry and TAB are reset here.
-     */
     private void resetDisplays(Player player) {
         player.displayName(Component.text(player.getName(), NamedTextColor.WHITE));
         player.playerListName(Component.text(player.getName()));
@@ -750,21 +668,16 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return true;
     }
 
-    /** Removing a player who is online takes their access away now, unless something else allows them. */
     private void kickIfNoLongerAllowed(String username) {
         Player player = findOnlinePlayer(username);
         if (player == null) return;
-        // A display-only pin never granted access, so it never protects from a kick.
+
         if (verifiedRanks.containsKey(player.getUniqueId()) || pinGrantsAccess(player.getName())
                 || whitelist.contains(player.getName())) return;
         getLogger().info("Kicking " + player.getName() + " because they are no longer allowed in.");
         player.getScheduler().run(this, task -> player.kick(legacyText(kickMessage)), null);
     }
 
-    /**
-     * Pins, removes and lists the per-player rank overrides, which also decide what a
-     * player is shown as in chat, in the tab list and above their head.
-     */
     private boolean rank(CommandSender sender, String label, String[] args) {
         if (!sender.hasPermission(RANK_PERMISSION)) {
             sender.sendMessage(Component.text("You do not have permission.", NamedTextColor.RED));
@@ -776,7 +689,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
             return rankRemove(sender, label, args[2]);
         }
         if (args.length >= 4 && (args[1].equalsIgnoreCase("set") || args[1].equalsIgnoreCase("add"))) {
-            // Rank names contain spaces, so everything the admin typed after the name counts.
+
             return rankSet(sender, label, args[2], String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
         }
         sender.sendMessage(Component.text("Usage: /" + label + " rank set <player> <rank>", NamedTextColor.YELLOW));
@@ -841,9 +754,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
                 + rankOverrides.size() + " left).", NamedTextColor.GREEN));
         Player player = findOnlinePlayer(name);
         if (player != null) {
-            // A verified staff member keeps their own rank back; a whitelisted player keeps
-            // access but goes back to their own rank (looked up again when needed);
-            // anyone who was only here because of the pin loses access with it.
+
             if (verifiedRanks.containsKey(player.getUniqueId())) applyToOnlinePlayer(name);
             else if (whitelist.contains(player.getName())) {
                 player.getScheduler().run(this, task -> {
@@ -879,7 +790,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return true;
     }
 
-    /** Everything that decides what one player is shown as, answers "why is my rank wrong?". */
     private boolean info(CommandSender sender, String[] args) {
         if (!sender.hasPermission(INFO_PERMISSION)) {
             sender.sendMessage(Component.text("You do not have permission.", NamedTextColor.RED));
@@ -894,24 +804,26 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         Player online = findOnlinePlayer(username);
         UUID id = online == null ? null : online.getUniqueId();
         String pinnedLabel = rankOverrides.rankFor(username);
+        boolean verified = id != null && verifiedRanks.containsKey(id);
+        boolean whitelisted = whitelist.contains(username);
+        boolean pinGrants = pinnedLabel != null && overrideGrantsAccess;
         StaffRank rank = pinnedLabel != null ? pinnedRank(pinnedLabel)
                 : id == null ? null : verifiedRanks.get(id);
         sender.sendMessage(line("Player", username + (online == null ? " (offline)" : " (online)")));
         sender.sendMessage(line("Rank", rank == null ? "none" : rank.name()));
         sender.sendMessage(line("Rank source", pinnedLabel != null
                 ? "rank pin" + (rankDirectory.defines(pinnedLabel) ? " from custom-ranks" : " (not in custom-ranks)")
-                : id != null && verifiedRanks.containsKey(id) ? "Silent Client rank check"
+                : verified ? "Silent Client rank check"
                 : "no rank in this session"));
-        sender.sendMessage(line("Whitelisted", whitelist.contains(username) ? "yes" : "no"));
-        sender.sendMessage(line("Access", pinnedLabel != null
-                ? overrideGrantsAccess ? "allowed by the rank pin" : "rank pin is display-only"
-                : id != null && verifiedRanks.containsKey(id) ? "verified Silent Client staff"
-                : whitelist.contains(username) ? "allowed by the join whitelist"
+        sender.sendMessage(line("Whitelisted", whitelisted ? "yes" : "no"));
+        sender.sendMessage(line("Access", pinGrants ? "allowed by the rank pin"
+                : verified ? "verified Silent Client staff"
+                : whitelisted ? "allowed by the join whitelist"
+                : pinnedLabel != null ? "rank pin is display-only"
                 : "not allowed on its own"));
         return true;
     }
 
-    /** Asks Silent Client about one name right now, ignoring the cache. */
     private boolean check(CommandSender sender, String label, String[] args) {
         if (!sender.hasPermission(INFO_PERMISSION)) {
             sender.sendMessage(Component.text("You do not have permission.", NamedTextColor.RED));
@@ -945,7 +857,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
                         NamedTextColor.YELLOW));
                 return;
             }
-            // Fresh service data, so pins naming these ranks pick up the right colours.
+
             learnServiceRanks(result.staffRanks());
             StringBuilder ranks = new StringBuilder();
             for (StaffRank rank : result.staffRanks()) {
@@ -961,7 +873,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         return true;
     }
 
-    /** Runs a reply where chat messages belong; safe on Folia and on Paper alike. */
     private void tell(CommandSender sender, Runnable action) {
         Bukkit.getGlobalRegionScheduler().run(this, task -> action.run());
     }
@@ -1017,17 +928,16 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
                 return StaffWhitelist.filter(List.of("set", "remove", "list"), args[1]);
             }
             if (args.length == 3 && !args[1].equalsIgnoreCase("list")) {
-                // A new pin targets an online player; removing one targets an existing pin.
+
                 if (args[1].equalsIgnoreCase("set") || args[1].equalsIgnoreCase("add")) {
                     return StaffWhitelist.filter(onlineNames(), args[2]);
                 }
                 return StaffWhitelist.filter(rankOverrides.names(), args[2]);
             }
             if (args.length >= 4 && (args[1].equalsIgnoreCase("set") || args[1].equalsIgnoreCase("add"))) {
-                // Configured ranks first, because those are the ones with a colour and a priority.
-                // Rank names contain spaces, so join everything from the rank onwards.
+
                 List<String> labels = new java.util.ArrayList<>(rankDirectory.labels());
-                for (String known : RankPolicy.DEFAULT_STAFF_RANKS) {
+                for (String known : RankPolicy.DEFAULT_STAFF_RANKS_ORDERED) {
                     if (!labels.contains(known)) labels.add(known);
                 }
                 for (String used : rankOverrides.labels()) {

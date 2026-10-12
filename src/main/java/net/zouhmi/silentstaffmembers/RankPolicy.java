@@ -1,5 +1,6 @@
 package net.zouhmi.silentstaffmembers;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -19,6 +20,21 @@ final class RankPolicy {
             "Senior Admin",
             "Developer",
             "Owner"
+    );
+
+    static final List<String> DEFAULT_STAFF_RANKS_ORDERED = List.of(
+            "Owner",
+            "Developer",
+            "Senior Admin",
+            "Admin",
+            "Client Mod Manager",
+            "Tester Manager",
+            "Senior Client Mod",
+            "Client Mod",
+            "Senior Tech Support",
+            "Tech Support",
+            "Senior Tester",
+            "Tester"
     );
 
     private final Set<String> ranks;

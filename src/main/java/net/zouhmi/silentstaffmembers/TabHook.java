@@ -18,27 +18,8 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
-/**
- * Optional integration with NEZNAMY's TAB plugin.
- *
- * <p>When TAB is installed it owns the tab list and blocks other plugins from setting
- * the vanilla player list name, so this class pushes the rank through TAB's API
- * instead - both the tab-list prefix/suffix and, optionally, the nametag prefix.
- *
- * <p>TAB's API classes are compiled against but never bundled, and every reference to
- * them lives in this class. The plugin only constructs it once it knows TAB is
- * installed, so on a server without TAB these classes are never resolved.
- */
 final class TabHook {
-    /**
-     * Staff ranks mapped onto the sorting teams TAB's own sorting lists ask for. TAB
-     * sorts players by team name and warns "group (none) is not in sorting list!" for
-     * anyone whose permission group is unknown, pushing every staff member to the
-     * bottom of the list. A pin grants a known team instead, so staff sort by rank.
-     *
-     * <p>The names are matched the way the rest of the plugin ranks them; a rank that
-     * has no team here sorts like the player TAB already handles.
-     */
+
     private static final Map<String, String> SORT_TEAMS = Map.ofEntries(
             Map.entry(RankPolicy.normalize("Owner"), "owner"),
             Map.entry(RankPolicy.normalize("Developer"), "admin"),
@@ -53,30 +34,27 @@ final class TabHook {
             Map.entry(RankPolicy.normalize("Senior Tester"), "helper"),
             Map.entry(RankPolicy.normalize("Tester"), "helper"));
 
-    /** The team a rank sorts into, or {@code null} when TAB's own sorting is left alone. */
     static String sortTeamFor(String rankName) {
         if (rankName == null) return null;
         return SORT_TEAMS.get(RankPolicy.normalize(rankName));
     }
 
-    /** How often a player is re-applied before giving up; each attempt is a few ticks apart. */
     private static final int MAX_RETRIES = 12;
 
-    /** Defers an update until the player is usable, without blocking whoever asked for it. */
     interface RetryScheduler {
         void schedule(UUID playerId, int attempt, Runnable action);
     }
 
     private final Logger logger;
     private final Supplier<String> tabFormat;
-    /** The TAB sorting team to force onto staff, or blank to leave TAB's own sorting alone. */
+
     private final Supplier<String> sortTeam;
     private final Function<UUID, StaffRank> ranks;
     private final boolean nametagPrefix;
     private final TabAPI api;
     private final EventBus bus;
     private final RetryScheduler retryScheduler;
-    /** Players TAB was not ready for yet, so only one retry per player is ever pending. */
+
     private final Map<UUID, Integer> retryAttempts = new ConcurrentHashMap<>();
     private final AtomicBoolean warnedAboutFailures = new AtomicBoolean();
     private EventHandler<PlayerLoadEvent> playerLoadHandler;
@@ -96,20 +74,11 @@ final class TabHook {
         this.bus = bus;
     }
 
-    /**
-     * Connects to TAB when it is installed and its event bus is available.
-     *
-     * @return the hook, or {@code null} when TAB is absent or its API is unusable
-     */
     static TabHook register(Logger logger, Supplier<String> tabFormat, Function<UUID, StaffRank> ranks,
                             boolean nametagPrefix) {
         return register(logger, tabFormat, ranks, nametagPrefix, () -> "", (playerId, attempt, task) -> { });
     }
 
-    /**
-     * @param sortTeam       the TAB sorting team to force onto staff, blank to leave TAB alone
-     * @param retryScheduler how a player is re-applied once TAB is ready for them
-     */
     static TabHook register(Logger logger, Supplier<String> tabFormat, Function<UUID, StaffRank> ranks,
                             boolean nametagPrefix, Supplier<String> sortTeam,
                             RetryScheduler retryScheduler) {
@@ -130,13 +99,11 @@ final class TabHook {
             return null;
         }
         try {
-            // Read TAB's feature state before registering anything: if this throws, the
-            // hook is abandoned without half-registering listeners.
+
             String summary = describe(api, nametagPrefix);
             TabHook hook = new TabHook(logger, tabFormat, ranks, nametagPrefix, sortTeam,
                     retryScheduler, api, bus);
-            // TAB loads players asynchronously, so a join is re-applied once TAB knows
-            // the player, and a TAB reload re-applies every online player's rank.
+
             hook.playerLoadHandler = event -> hook.apply(event.getPlayer());
             hook.tabLoadHandler = event -> hook.applyAllOnline();
             bus.register(PlayerLoadEvent.class, hook.playerLoadHandler);
@@ -149,10 +116,6 @@ final class TabHook {
         }
     }
 
-    /**
-     * Reports which TAB features actually answered, so a server log shows whether the rank
-     * can reach the tab list and the nametag above the player's head.
-     */
     private static String describe(TabAPI api, boolean nametagPrefix) {
         String tablist = api.getTabListFormatManager() == null
                 ? "tab list formatting is disabled in TAB" : "tab list formatting hooked";
@@ -166,8 +129,7 @@ final class TabHook {
         if (closed) return;
         TabPlayer player = api.getPlayer(id);
         if (player == null) {
-            // TAB has not taken the player yet. Its own load event re-applies the rank, and
-            // the retry covers the case where that event already fired before we were ready.
+
             scheduleRetry(id);
             return;
         }
@@ -186,8 +148,7 @@ final class TabHook {
         StaffRank rank = ranks.apply(player.getUniqueId());
         if (rank == null) return;
         if (!player.isLoaded()) {
-            // TAB announces a player before the server-side player exists; writing now
-            // throws "This player is not loaded yet", which used to break the join event.
+
             scheduleRetry(player.getUniqueId());
             return;
         }
@@ -195,7 +156,7 @@ final class TabHook {
             applyNow(player, rank);
             retryAttempts.remove(player.getUniqueId());
         } catch (IllegalStateException e) {
-            // TAB refused because the player is mid-load; a short retry settles it.
+
             logger.fine("TAB was not ready for " + player.getName() + " yet; retrying the rank update.");
             scheduleRetry(player.getUniqueId());
         } catch (RuntimeException e) {
@@ -224,9 +185,8 @@ final class TabHook {
         forceSortTeam(player, rank);
     }
 
-    /** TAB sorts players by team name, so staff land at the bottom unless a team is forced. */
     private void forceSortTeam(TabPlayer player, StaffRank rank) {
-        // The admin's own setting wins; blank means "pick a team from the rank".
+
         String team = configuredSortTeam();
         if (team == null) team = sortTeamFor(rank.name());
         if (team == null) return;
@@ -239,16 +199,11 @@ final class TabHook {
         }
     }
 
-    /** The configured sorting team, or {@code null} when TAB's own sorting is left alone. */
     private String configuredSortTeam() {
         String team = sortTeam == null ? null : sortTeam.get();
         return team == null || team.isBlank() ? null : team.trim();
     }
 
-    /**
-     * Re-applies a player later, once per outstanding attempt. TAB's own load event
-     * usually arrives first; this is the safety net for the join path.
-     */
     private void scheduleRetry(UUID id) {
         if (closed) return;
         int attempt = retryAttempts.merge(id, 1, Integer::sum);
@@ -271,10 +226,6 @@ final class TabHook {
         });
     }
 
-    /**
-     * TAB's nametag API only has a prefix slot, so the rank goes there. When the
-     * tab format contains no rank at all, the nametag is left empty to respect it.
-     */
     private static String nametagText(String format, NameFormats.TabSlots slots, StaffRank rank) {
         String prefix = slots.prefix();
         if (!prefix.isBlank()) return prefix;
@@ -282,12 +233,10 @@ final class TabHook {
         return NameFormats.tabRank(rank) + " ";
     }
 
-    /** TAB takes {@code null} to mean "reset to TAB's own value". */
     private static String orNull(String value) {
         return value == null || value.isBlank() ? null : value;
     }
 
-    /** Undoes every override this hook made, leaving TAB's own formatting in place. */
     void clearAll() {
         for (TabPlayer player : api.getOnlinePlayers()) {
             if (ranks.apply(player.getUniqueId()) == null) continue;
@@ -295,10 +244,6 @@ final class TabHook {
         }
     }
 
-    /**
-     * Forgets one player's overrides, leaving TAB's own formatting in place. Used when a
-     * player loses their rank but stays online, so no stale prefix follows them around.
-     */
     void clear(UUID id) {
         if (closed) return;
         TabPlayer player = api.getPlayer(id);
@@ -306,7 +251,6 @@ final class TabHook {
         clear(player);
     }
 
-    /** One player TAB cannot reach must not stop the others from being cleaned up. */
     private void clear(TabPlayer player) {
         TabListFormatManager formats = api.getTabListFormatManager();
         NameTagManager nametags = api.getNameTagManager();
@@ -326,7 +270,6 @@ final class TabHook {
         }
     }
 
-    /** Detaches from TAB: the overrides are reverted and no further events are handled. */
     void close() {
         closed = true;
         retryAttempts.clear();

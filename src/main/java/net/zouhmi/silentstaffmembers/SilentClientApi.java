@@ -54,20 +54,20 @@ final class SilentClientApi implements AutoCloseable {
         if (found != null && now - found.cachedAtNanos() < cacheTtlNanos) {
             return CompletableFuture.completedFuture(found.result());
         }
-        // URLEncoder is for query strings (space -> +); this is a path segment.
+
         String encoded = URLEncoder.encode(username, StandardCharsets.UTF_8).replace("+", "%20");
         return getJson("/users/account/" + encoded)
                 .thenCompose(accountResponse -> {
                     JsonObject account = object(accountResponse, "account");
                     String canonicalName = string(account, "username");
                     if (canonicalName == null || !canonicalName.equalsIgnoreCase(username)) {
-                        throw new CompletionException(new LookupException("Silent Client account not found"));
+                        throw new LookupException("Silent Client account not found");
                     }
                     long userId;
                     try {
                         userId = account.get("user_id").getAsLong();
                     } catch (RuntimeException e) {
-                        throw new CompletionException(new LookupException("Account response has no user id", e));
+                        throw new LookupException("Account response has no user id", e);
                     }
                     return getJson("/ranks/ranks/user/" + userId)
                             .thenApply(rankResponse -> parseRanks(canonicalName, rankResponse));
@@ -78,10 +78,6 @@ final class SilentClientApi implements AutoCloseable {
                 });
     }
 
-    /**
-     * The same lookup, but the cached answer is thrown away first, so an admin asking
-     * "has this rank changed?" is told what the service says right now.
-     */
     CompletableFuture<LookupResult> lookupFresh(String username) {
         cache.remove(normalize(username));
         return lookup(username);
@@ -97,8 +93,8 @@ final class SilentClientApi implements AutoCloseable {
         return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenApply(response -> {
                     if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                        throw new CompletionException(new LookupException(
-                                "Silent Client API returned HTTP " + response.statusCode()));
+                        throw new LookupException(
+                                "Silent Client API returned HTTP " + response.statusCode());
                     }
                     try {
                         JsonElement parsed = JsonParser.parseString(response.body());
@@ -109,7 +105,7 @@ final class SilentClientApi implements AutoCloseable {
                         }
                         return root;
                     } catch (JsonParseException | IllegalStateException e) {
-                        throw new CompletionException(new LookupException("Invalid JSON from Silent Client API", e));
+                        throw new LookupException("Invalid JSON from Silent Client API", e);
                     }
                 });
     }
@@ -117,7 +113,7 @@ final class SilentClientApi implements AutoCloseable {
     private LookupResult parseRanks(String username, JsonObject response) {
         JsonElement ranksElement = response.get("ranks");
         if (ranksElement == null || !ranksElement.isJsonArray()) {
-            throw new CompletionException(new LookupException("Rank response is missing its ranks list"));
+            throw new LookupException("Rank response is missing its ranks list");
         }
         JsonArray ranks = ranksElement.getAsJsonArray();
         List<StaffRank> accepted = new ArrayList<>();
@@ -144,7 +140,7 @@ final class SilentClientApi implements AutoCloseable {
             long now = System.nanoTime();
             cache.entrySet().removeIf(entry -> now - entry.getValue().cachedAtNanos() >= cacheTtlNanos);
             if (cache.size() >= maxCacheEntries) {
-                // Evict the oldest entry, not an arbitrary one, so hot ranks survive.
+
                 String oldest = null;
                 long oldestAt = Long.MAX_VALUE;
                 for (Map.Entry<String, CachedResult> entry : cache.entrySet()) {
@@ -170,7 +166,7 @@ final class SilentClientApi implements AutoCloseable {
     private static JsonObject object(JsonObject root, String field) {
         JsonElement element = root.get(field);
         if (element == null || !element.isJsonObject()) {
-            throw new CompletionException(new LookupException("Account response is missing its account"));
+            throw new LookupException("Account response is missing its account");
         }
         return element.getAsJsonObject();
     }
@@ -181,7 +177,6 @@ final class SilentClientApi implements AutoCloseable {
                 ? null : value.getAsString();
     }
 
-    /** True when the API's {@code errors} element actually reports a failure. */
     private static boolean hasErrors(JsonElement errors) {
         if (errors == null || errors.isJsonNull()) return false;
         if (errors.isJsonArray()) return !errors.getAsJsonArray().isEmpty();
@@ -214,7 +209,7 @@ final class SilentClientApi implements AutoCloseable {
         try {
             client.close();
         } catch (RuntimeException e) {
-            // HttpClient close is best-effort on reload; threads are daemon anyway.
+
         }
     }
 
@@ -223,11 +218,6 @@ final class SilentClientApi implements AutoCloseable {
             return !staffRanks.isEmpty();
         }
 
-        /**
-         * The rank to show: the highest priority the account holds, honouring the
-         * order the service returned on a tie. This keeps Senior Tech Support
-         * ahead of Tech Support, and Tester ahead of nothing it outranks.
-         */
         StaffRank displayRank() {
             StaffRank best = null;
             for (StaffRank rank : staffRanks) {
