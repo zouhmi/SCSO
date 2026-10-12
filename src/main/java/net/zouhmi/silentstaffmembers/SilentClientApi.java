@@ -140,7 +140,6 @@ final class SilentClientApi implements AutoCloseable {
             long now = System.nanoTime();
             cache.entrySet().removeIf(entry -> now - entry.getValue().cachedAtNanos() >= cacheTtlNanos);
             if (cache.size() >= maxCacheEntries) {
-
                 String oldest = null;
                 long oldestAt = Long.MAX_VALUE;
                 for (Map.Entry<String, CachedResult> entry : cache.entrySet()) {
@@ -209,7 +208,6 @@ final class SilentClientApi implements AutoCloseable {
         try {
             client.close();
         } catch (RuntimeException e) {
-
         }
     }
 

@@ -19,7 +19,6 @@ import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 final class TabHook {
-
     private static final Map<String, String> SORT_TEAMS = Map.ofEntries(
             Map.entry(RankPolicy.normalize("Owner"), "owner"),
             Map.entry(RankPolicy.normalize("Developer"), "admin"),
@@ -93,13 +92,12 @@ final class TabHook {
             logger.warning("TAB is installed but returned no API instance; keeping the vanilla player list name.");
             return null;
         }
-        EventBus bus = api.getEventBus();
-        if (bus == null) {
-            logger.warning("TAB's event bus is unavailable; keeping the vanilla player list name.");
-            return null;
-        }
         try {
-
+            EventBus bus = api.getEventBus();
+            if (bus == null) {
+                logger.warning("TAB's event bus is unavailable; keeping the vanilla player list name.");
+                return null;
+            }
             String summary = describe(api, nametagPrefix);
             TabHook hook = new TabHook(logger, tabFormat, ranks, nametagPrefix, sortTeam,
                     retryScheduler, api, bus);
@@ -127,9 +125,14 @@ final class TabHook {
 
     void apply(UUID id) {
         if (closed) return;
-        TabPlayer player = api.getPlayer(id);
+        TabPlayer player;
+        try {
+            player = api.getPlayer(id);
+        } catch (RuntimeException e) {
+            scheduleRetry(id);
+            return;
+        }
         if (player == null) {
-
             scheduleRetry(id);
             return;
         }
@@ -138,7 +141,15 @@ final class TabHook {
 
     void applyAllOnline() {
         if (closed) return;
-        for (TabPlayer player : api.getOnlinePlayers()) {
+        TabPlayer[] online;
+        try {
+            online = api.getOnlinePlayers();
+        } catch (RuntimeException e) {
+            logger.fine("TAB was gone while applying ranks: " + e);
+            return;
+        }
+        if (online == null) return;
+        for (TabPlayer player : online) {
             apply(player);
         }
     }
@@ -148,7 +159,6 @@ final class TabHook {
         StaffRank rank = ranks.apply(player.getUniqueId());
         if (rank == null) return;
         if (!player.isLoaded()) {
-
             scheduleRetry(player.getUniqueId());
             return;
         }
@@ -156,7 +166,6 @@ final class TabHook {
             applyNow(player, rank);
             retryAttempts.remove(player.getUniqueId());
         } catch (IllegalStateException e) {
-
             logger.fine("TAB was not ready for " + player.getName() + " yet; retrying the rank update.");
             scheduleRetry(player.getUniqueId());
         } catch (RuntimeException e) {
@@ -186,7 +195,6 @@ final class TabHook {
     }
 
     private void forceSortTeam(TabPlayer player, StaffRank rank) {
-
         String team = configuredSortTeam();
         if (team == null) team = sortTeamFor(rank.name());
         if (team == null) return;
@@ -238,7 +246,14 @@ final class TabHook {
     }
 
     void clearAll() {
-        for (TabPlayer player : api.getOnlinePlayers()) {
+        TabPlayer[] online;
+        try {
+            online = api.getOnlinePlayers();
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (online == null) return;
+        for (TabPlayer player : online) {
             if (ranks.apply(player.getUniqueId()) == null) continue;
             clear(player);
         }
@@ -246,7 +261,12 @@ final class TabHook {
 
     void clear(UUID id) {
         if (closed) return;
-        TabPlayer player = api.getPlayer(id);
+        TabPlayer player;
+        try {
+            player = api.getPlayer(id);
+        } catch (RuntimeException e) {
+            return;
+        }
         if (player == null) return;
         clear(player);
     }
@@ -278,8 +298,16 @@ final class TabHook {
         } catch (RuntimeException e) {
             logger.fine("TAB was already gone while clearing rank formats: " + e);
         }
-        if (playerLoadHandler != null) bus.unregister(playerLoadHandler);
-        if (tabLoadHandler != null) bus.unregister(tabLoadHandler);
+        try {
+            if (playerLoadHandler != null) bus.unregister(playerLoadHandler);
+        } catch (RuntimeException e) {
+            logger.fine("TAB was already gone while unregistering: " + e);
+        }
+        try {
+            if (tabLoadHandler != null) bus.unregister(tabLoadHandler);
+        } catch (RuntimeException e) {
+            logger.fine("TAB was already gone while unregistering: " + e);
+        }
         playerLoadHandler = null;
         tabLoadHandler = null;
     }

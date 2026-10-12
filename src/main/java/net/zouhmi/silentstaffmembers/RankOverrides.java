@@ -73,7 +73,6 @@ final class RankOverrides {
     }
 
     synchronized void load(Map<String, String> configured) {
-
         Map<String, String> remember = new LinkedHashMap<>();
         Map<String, String> spellings = new LinkedHashMap<>();
         if (configured != null) {

@@ -94,7 +94,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
 
     @Override
     public void onEnable() {
-
         migrateLegacyDataFolder();
         saveDefaultConfig();
         whitelist = new StaffWhitelist(getDataFolder().toPath().resolve("whitelist.yml"), getLogger());
@@ -114,7 +113,10 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
     private boolean loadSettings() {
         try {
             String baseUrl = getConfig().getString("api-base-url", "https://api.silentclient.net");
-            URI uri = URI.create(baseUrl);
+            if (baseUrl == null || baseUrl.isBlank()) {
+                throw new IllegalArgumentException("api-base-url must be a trusted HTTPS base URL");
+            }
+            URI uri = URI.create(baseUrl.trim());
             if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
                     || uri.getUserInfo() != null || uri.getQuery() != null || uri.getFragment() != null) {
                 throw new IllegalArgumentException("api-base-url must be a trusted HTTPS base URL");
@@ -151,7 +153,7 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
             rankOverrides.load(RankOverrides.readConfigured(
                     getConfig().getConfigurationSection("rank-overrides")));
             return true;
-        } catch (IllegalArgumentException e) {
+        } catch (IllegalArgumentException | NullPointerException e) {
             getLogger().severe("Invalid configuration: " + e.getMessage());
             return false;
         }
@@ -319,14 +321,12 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         sessionNames.put(event.getUniqueId(), username);
         String pinned = rankOverrides.rankFor(username);
         if (pinned != null && overrideGrantsAccess) {
-
             allowedSessions.add(event.getUniqueId());
             getLogger().info("Allowed " + username + " with the rank pin " + pinned
                     + " without a staff rank check.");
             return;
         }
         if (whitelist.contains(username)) {
-
             allowedSessions.add(event.getUniqueId());
             getLogger().info("Allowed whitelisted player " + username + " without a staff rank check.");
             return;
@@ -371,11 +371,9 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
 
     private void denyLookupFailure(AsyncPlayerPreLoginEvent event) {
         if (failClosed) {
-
             sessionNames.remove(event.getUniqueId());
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, legacyText(lookupFailedMessage));
         } else {
-
             allowedSessions.add(event.getUniqueId());
             getLogger().warning("Allowing " + event.getName() + " because fail-closed is disabled.");
         }
@@ -387,7 +385,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         sessionNames.putIfAbsent(player.getUniqueId(), player.getName());
         String username = player.getName();
         if (!allowedSessions.contains(player.getUniqueId()) && !pinGrantsAccess(username)) {
-
             player.kick(legacyText(kickMessage));
             return;
         }
@@ -472,7 +469,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         if (previous != null) previous.close();
         connectTab();
         for (Player player : Bukkit.getOnlinePlayers()) {
-
             player.getScheduler().run(this, task -> {
                 if (player.isOnline()) applyDisplays(player);
             }, null);
@@ -509,7 +505,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         UUID id = player.getUniqueId();
         localApi.lookupFresh(username).whenComplete((result, error) -> {
             if (error != null || result == null) {
-
                 Throwable cause = error instanceof ExecutionException || error instanceof CompletionException
                         ? error.getCause() : error;
                 getLogger().warning("Sync lookup failed for " + username + ": "
@@ -580,7 +575,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
         localApi.lookup(username).whenComplete((result, error) -> {
             boolean definitiveNotStaff = error == null && result != null && !result.isStaff();
             if (error != null || result == null || !result.isStaff()) {
-
                 if (definitiveNotStaff) verifiedRanks.remove(player.getUniqueId());
                 if (definitiveNotStaff && kickIfNotStaff && !whitelist.contains(username)
                         && !pinGrantsAccess(username)) {
@@ -708,7 +702,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
             return rankRemove(sender, label, args[2]);
         }
         if (args.length >= 4 && (args[1].equalsIgnoreCase("set") || args[1].equalsIgnoreCase("add"))) {
-
             return rankSet(sender, label, args[2], String.join(" ", Arrays.copyOfRange(args, 3, args.length)));
         }
         sender.sendMessage(Component.text("Usage: /" + label + " rank set <player> <rank>", NamedTextColor.YELLOW));
@@ -773,7 +766,6 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
                 + rankOverrides.size() + " left).", NamedTextColor.GREEN));
         Player player = findOnlinePlayer(name);
         if (player != null) {
-
             if (verifiedRanks.containsKey(player.getUniqueId())) applyToOnlinePlayer(name);
             else if (whitelist.contains(player.getName())) {
                 player.getScheduler().run(this, task -> {
@@ -947,14 +939,12 @@ public final class SilentStaffMembersPlugin extends JavaPlugin implements Listen
                 return StaffWhitelist.filter(List.of("set", "remove", "list"), args[1]);
             }
             if (args.length == 3 && !args[1].equalsIgnoreCase("list")) {
-
                 if (args[1].equalsIgnoreCase("set") || args[1].equalsIgnoreCase("add")) {
                     return StaffWhitelist.filter(onlineNames(), args[2]);
                 }
                 return StaffWhitelist.filter(rankOverrides.names(), args[2]);
             }
             if (args.length >= 4 && (args[1].equalsIgnoreCase("set") || args[1].equalsIgnoreCase("add"))) {
-
                 List<String> labels = new java.util.ArrayList<>(rankDirectory.labels());
                 for (String known : RankPolicy.DEFAULT_STAFF_RANKS_ORDERED) {
                     if (!labels.contains(known)) labels.add(known);

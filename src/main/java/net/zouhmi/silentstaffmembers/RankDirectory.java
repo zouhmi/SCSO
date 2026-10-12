@@ -18,7 +18,6 @@ final class RankDirectory {
     private final Map<String, Entry> entries;
 
     private RankDirectory(Map<String, Entry> entries) {
-
         this.entries = Collections.unmodifiableMap(new LinkedHashMap<>(entries));
     }
 
@@ -54,7 +53,6 @@ final class RankDirectory {
             String value = section.getString(key);
             if (value == null || value.isBlank()) return null;
             color = readColor(value, key, warn);
-
         }
         if (label.length() > MAX_LABEL_LENGTH) {
             label = label.substring(0, MAX_LABEL_LENGTH);

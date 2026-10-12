@@ -67,10 +67,8 @@ final class StaffWhitelist {
         if (raw instanceof List<?> list) {
             for (Object value : list) addIfName(value);
         } else if (raw instanceof String single) {
-
             addIfName(single);
         } else if (raw instanceof Map<?, ?> map) {
-
             for (Object key : map.keySet()) addIfName(key);
         }
     }
