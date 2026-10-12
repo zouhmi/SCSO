@@ -1,5 +1,5 @@
 name: SCSO
-version: '1.1.0'
+version: '1.2.0'
 main: net.zouhmi.silentstaffmembers.SilentStaffMembersPlugin
 description: Silent Client Staff Only - restricts access to Silent Client staff and shows their rank in chat and tab.
 author: Zouhmi

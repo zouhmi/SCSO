@@ -60,7 +60,7 @@ final class NameFormats {
 
     private static Component legacy(String text) {
         if (text == null || text.isEmpty()) return Component.empty();
-        return LEGACY.deserialize(text);
+        return LEGACY.deserialize(text.replace('§', '&'));
     }
 
     static String tabRank(StaffRank rank) {
