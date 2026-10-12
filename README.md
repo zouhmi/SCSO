@@ -2,7 +2,7 @@
   <img src="assets/logo.png" width="128" alt="Silent Client logo">
 </p>
 
-# SCSO | Silent Client Staff Only
+<h1 align="center">SCSO | Silent Client Staff Only</h1>
 
 <p align="center"><a href="https://silentclient.net">Silent Client</a></p>
 
